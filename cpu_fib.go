@@ -2,9 +2,33 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
+	"os"
 	"time"
+
+	"github.com/BurntSushi/toml"
 )
+
+// Info from config file
+type Average struct {
+	Fib float64
+}
+
+// Reads info from averages file
+func ReadConfig() Average {
+	configfile := "benchmarks.conf"
+	_, err := os.Stat(configfile)
+	if err != nil {
+		log.Fatal("Config file is missing: ", configfile)
+	}
+
+	var average Average
+	if _, err := toml.DecodeFile(configfile, &average); err != nil {
+		log.Fatal(err)
+	}
+	return average
+}
 
 func fib(n uint64) uint64 {
 	if n <= 2 { // terminate recursion
@@ -22,14 +46,43 @@ func fib(n uint64) uint64 {
 	return <-res + <-res
 }
 
+func avg(values [3]float64) float64 {
+	total := 0.0
+	for _, v := range values {
+		total += v
+	}
+	return total / float64(len(values))
+}
+
+func debug(message interface{}) {
+	if *verbose {
+		log.Println(message)
+	}
+}
+
+var verbose *bool
+
 func main() {
 
 	iter := flag.Int("i", 30, "number of iterations to run fib sequence. Default of 30")
-	// Once all flags are declared, call `flag.Parse()`
-	// to execute the command-line parsing.
+	verbose = flag.Bool("verbose", false, "show human readable output")
 	flag.Parse()
 
-	t := time.Now().UTC()
-	fib(uint64(*iter))
-	log.Println("Time to run with", *iter, "iterations", time.Since(t))
+	averages := ReadConfig()
+	times := [3]float64{}
+	for i := 0; i < 3; i++ {
+		t := time.Now().UTC()
+		fib(uint64(*iter))
+		times[i] = time.Since(t).Seconds()
+		debug(time.Since(t).Seconds())
+	}
+
+	result := avg(times)
+	if result > averages.Fib+1 {
+		debug(fmt.Sprintf("%f %f", result, averages.Fib))
+		os.Exit(1)
+	}
+	debug(fmt.Sprintf("average fib time (seconds): %f user provided threshold (seconds):%f", result, averages.Fib))
+	os.Exit(0)
+
 }
